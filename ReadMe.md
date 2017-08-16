@@ -1,6 +1,13 @@
-### assets copy
+## DISCLAIMER
+`ONLY FOR STUDY, NOT FOR COMMERCIAL USE `
+
+### 1. assets copy
 > **Note:**DO NOT CHANGE ASSETS PATH
 #### 2.1 TtsType.MAGIC_TTS
+>iflytek tts for autonavi --- Zhiling Ling
+
 `/assets/tts/iflytek/autonavi`
 #### 2.2 TtsType.AWESOME_TTS
-`/assets/tts/orignial`
+>iflytek original tts
+
+`/assets/tts/original`
