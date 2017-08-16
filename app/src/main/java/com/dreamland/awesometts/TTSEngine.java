@@ -7,6 +7,7 @@ import android.media.MediaPlayer.OnCompletionListener;
 import android.media.MediaPlayer.OnErrorListener;
 import android.support.annotation.CallSuper;
 import android.text.TextUtils;
+import android.util.Log;
 
 import com.dreamland.awesometts.utils.AbsPollOnceThread;
 
@@ -30,7 +31,7 @@ public class TTSEngine<T extends AbsTtsInfo> implements OnCompletionListener, On
 	private AudioManager mAudioManager;
 
 	private TtsCore ttsCore;
-	
+
 	private TtsReaderThread mTtsReaderThread;
 
 	public TTSEngine(Context context,TtsType ttsType){
@@ -60,7 +61,7 @@ public class TTSEngine<T extends AbsTtsInfo> implements OnCompletionListener, On
 		}
 		T info = mTtsReaderThread.getCurrentInfo();
 		if(info != null){
-			L.w(TAG,"onTTSEnd:"+info);
+			Log.w(TAG,"onTTSEnd:"+info);
 			synchronized(this){
 				for(ITTSListener<T> l:mListeners){
 					l.onTTSEnd(info);
@@ -76,7 +77,7 @@ public class TTSEngine<T extends AbsTtsInfo> implements OnCompletionListener, On
 		mAudioManager.requestAudioFocus(this,AudioManager.STREAM_MUSIC,AudioManager.AUDIOFOCUS_GAIN_TRANSIENT_MAY_DUCK);
 		T info = mTtsReaderThread.getCurrentInfo();
 		if(info != null){
-			L.w(TAG,"onTTSPlay:"+info);
+			Log.w(TAG,"onTTSPlay:"+info);
 			synchronized(this){
 				for(ITTSListener<T> l:mListeners){
 					l.onTTSPlay(info);
@@ -101,10 +102,10 @@ public class TTSEngine<T extends AbsTtsInfo> implements OnCompletionListener, On
 		}
 
 		public void clearQueue(){
-			L.v(TAG, "clearQueue:"+mTtsQueue.peekLast());
+			Log.v(TAG, "clearQueue:"+mTtsQueue.peekLast());
 			mTtsQueue.clear();
 		}
-		
+
 		public void notifyEnd(){
 			synchronized (_lock) {
 				_lock.notify();
@@ -122,24 +123,24 @@ public class TTSEngine<T extends AbsTtsInfo> implements OnCompletionListener, On
 
 				synchronized (_lock) {
 					try {
-						L.w(TAG,"等待ttsEnd:"+currentInfo);
+						Log.w(TAG,"等待ttsEnd:"+currentInfo);
 						_lock.wait();
 					} catch (InterruptedException e) {
 						e.printStackTrace();
 					}
 				}
 			}
-			
+
 		}
 
 		@Override
 		protected void ready() {
-				
+
 		}
 
 		public T getCurrentInfo() {
 			return currentInfo;
-		}	
+		}
 	}
 
 	public void init(){
@@ -157,7 +158,7 @@ public class TTSEngine<T extends AbsTtsInfo> implements OnCompletionListener, On
 
 
 	protected void _play(String content){
-		L.i(TAG,"_play:"+content);
+		Log.i(TAG,"_play:"+content);
 		if(TextUtils.isEmpty(content)){
 			onTTSPlay();
 			onTTSEnd();
@@ -166,11 +167,11 @@ public class TTSEngine<T extends AbsTtsInfo> implements OnCompletionListener, On
 		}
 	}
 
-	
+
 	public void stop(){
 		T info = mTtsReaderThread.getCurrentInfo();
 		if(info != null){
-			L.w(TAG,"stop:"+info);
+			Log.w(TAG,"stop:"+info);
 			switch(info.getType()){
 			case AbsTtsInfo.TYPE_TTS:
 				ttsCore.stop();
