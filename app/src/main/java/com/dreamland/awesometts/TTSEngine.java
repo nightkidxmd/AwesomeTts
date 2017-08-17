@@ -115,19 +115,24 @@ public class TTSEngine<T extends AbsTtsInfo> implements OnCompletionListener, On
 		@Override
 		protected void pollOnceWork() {
 			while((currentInfo = mTtsQueue.poll()) != null && isRunning()){
+				boolean isPlayed = false;
 				if(currentInfo.getType() == AbsTtsInfo.TYPE_TTS){
-					_play(currentInfo.getContent());
+					isPlayed = _play(currentInfo.getContent());
 				}else if(currentInfo.getType() == AbsTtsInfo.TYPE_AUDIO){
-					playAudio(currentInfo.getContent());
+					isPlayed = playAudio(currentInfo.getContent());
 				}
 
-				synchronized (_lock) {
-					try {
-						Log.w(TAG,"等待ttsEnd:"+currentInfo);
-						_lock.wait();
-					} catch (InterruptedException e) {
-						e.printStackTrace();
+				if(isPlayed){
+					synchronized (_lock) {
+						try {
+							Log.w(TAG,"等待ttsEnd:"+currentInfo);
+							_lock.wait();
+						} catch (InterruptedException e) {
+							e.printStackTrace();
+						}
 					}
+				}else{
+					Log.e(TAG,"播放失败:"+currentInfo);
 				}
 			}
 
@@ -157,14 +162,16 @@ public class TTSEngine<T extends AbsTtsInfo> implements OnCompletionListener, On
 
 
 
-	protected void _play(String content){
+	protected boolean _play(String content){
 		Log.i(TAG,"_play:"+content);
 		if(TextUtils.isEmpty(content)){
 			onTTSPlay();
 			onTTSEnd();
+			return false;
 		}else {
 			ttsCore.play(content);
 		}
+		return true;
 	}
 
 
@@ -209,7 +216,7 @@ public class TTSEngine<T extends AbsTtsInfo> implements OnCompletionListener, On
 
 	private MediaPlayer mMediaPlayer;
 	
-	private void playAudio(String path){
+	private boolean playAudio(String path){
 		path = path.replace("default:", AUDIO_PATH+ File.separator);
 		try {
 			mMediaPlayer.reset();
@@ -218,9 +225,12 @@ public class TTSEngine<T extends AbsTtsInfo> implements OnCompletionListener, On
 			mMediaPlayer.setOnErrorListener(this);
 			mMediaPlayer.prepare();
 			mMediaPlayer.start();
+			onTTSPlay();
 		} catch (IllegalArgumentException | SecurityException | IOException | IllegalStateException e) {
 			e.printStackTrace();
+			return false;
 		}
+		return true;
 	}
 	
 	private void stopAudio(){
