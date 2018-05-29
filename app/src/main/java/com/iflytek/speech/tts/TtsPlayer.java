@@ -11,104 +11,92 @@ import com.iflytek.speech.libisstts;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 
-public class TtsPlayer
-  implements ITtsListener
-{
+public class TtsPlayer implements ITtsListener {
+  private static final int M_AUDIO_FORMAT = 2;
+  private static final int M_CHANNEL_CONFIG = 4;
+  private static final int M_SAMPLE_RATE_IN_HZ = 16000;
+  private static final String TAG ="TtsPlayer";
   private static int cnt = 0;
-  private static final int mAudioFormat = 2;
-  private static final int mChannelConfig = 4;
-  private static final int mSampleRateInHz = 16000;
-  private AudioTrack mAudioTrack = null;
   private final Lock mAudioTrackLock = new ReentrantLock();
-  private int mAudioTrackSteamState = 0;
   private final AudioWriteWorkingFunc mAudioWriteWorkingFunc = new AudioWriteWorkingFunc();
+  private final NativeHandle mNativeHandle = new NativeHandle();
+  private final Object mWorkingThreadSyncObj = new Object();
+  private AudioTrack mAudioTrack = null;
+  private int mAudioTrackSteamState = 0;
   private ITTSListener mITTSListener = null;
   private int mMinBufferSizeInBytes = 0;
-  private final NativeHandle mNativeHandle = new NativeHandle();
   private boolean mOnDataReadyFlag = false;
   private Thread mThreadAudioWrite = null;
-  private final Object mWorkingThreadSyncObj = new Object();
   private int nPreTextIndex = -1;
-  private String tag = "TtsPlayer_" + cnt;
 
-  public int Init(int paramInt, String paramString)
-  {
+  public int Init(int paramInt, String paramString) {
     cnt = 1 + cnt;
-    Log.d("ttsplayer", "Init cnt: " + cnt);
-    try
-    {
-      libisstts.destroy(this.mNativeHandle);
-      libisstts.configCreate(this.mNativeHandle, paramString, this);
-      if (this.mNativeHandle.err_ret != 0){
-        return this.mNativeHandle.err_ret;
+    Log.d(TAG,"Init cnt: " + cnt);
+    try {
+      libisstts.destroy(mNativeHandle);
+      libisstts.configCreate(mNativeHandle, paramString, this);
+      if (mNativeHandle.err_ret != 0) {
+        return mNativeHandle.err_ret;
       }
 
-      this.mMinBufferSizeInBytes = AudioTrack.getMinBufferSize(16000, 4, 2);
-      Log.d(this.tag, "mMinBufferSizeInBytes=" + this.mMinBufferSizeInBytes + ".");
-      if (this.mMinBufferSizeInBytes <= 0)
-      {
-        Log.e(this.tag, "Error: AudioTrack.getMinBufferSize(16000, 4, 2) ret " + this.mMinBufferSizeInBytes);
+      mMinBufferSizeInBytes = AudioTrack.getMinBufferSize(M_SAMPLE_RATE_IN_HZ, M_CHANNEL_CONFIG, M_AUDIO_FORMAT);
+      Log.d(TAG,"mMinBufferSizeInBytes=" + mMinBufferSizeInBytes + ".");
+      if (mMinBufferSizeInBytes <= 0) {
+        Log.e(TAG,"Error: AudioTrack.getMinBufferSize(16000, 4, 2) ret " + mMinBufferSizeInBytes);
         return 10106;
       }
-      if (this.mAudioTrack == null)
-      {
-        this.mAudioTrack = new AudioTrack(paramInt, 16000, 4, 2, 3 * this.mMinBufferSizeInBytes, 1);
-        if (this.mAudioTrack.getState() != 1)
-        {
-          Log.e(this.tag, "Error: Can't init AudioRecord!");
+      if (mAudioTrack == null) {
+        mAudioTrack = new AudioTrack(paramInt, M_SAMPLE_RATE_IN_HZ, M_CHANNEL_CONFIG, M_AUDIO_FORMAT, 3 * mMinBufferSizeInBytes, 1);
+        if (mAudioTrack.getState() != 1) {
+          Log.e(TAG,"Error: Can't init AudioRecord!");
           return -1;
         }
-        Log.d(this.tag, "new AudioTrack(streamType=" + paramInt + ")");
+        Log.d(TAG,"new AudioTrack(streamType=" + paramInt + ")");
       }
-      this.mAudioTrackSteamState = 0;
-      if (this.mThreadAudioWrite == null)
-      {
-        this.mAudioWriteWorkingFunc.clearExitFlag();
-        this.mThreadAudioWrite = new Thread(this.mAudioWriteWorkingFunc, "mThreadAudioWrite");
-        this.mThreadAudioWrite.start();
+      mAudioTrackSteamState = 0;
+      if (mThreadAudioWrite == null) {
+        mAudioWriteWorkingFunc.clearExitFlag();
+        mThreadAudioWrite = new Thread(mAudioWriteWorkingFunc, "mThreadAudioWrite");
+        mThreadAudioWrite.start();
       }
       return 0;
-    }
-    catch (IllegalArgumentException localIllegalArgumentException)
-    {
+    } catch (IllegalArgumentException e) {
+      e.printStackTrace();
     }
     return 10106;
   }
 
-  public int Pause()
-  {
-    Log.d(this.tag, "Pause");
-    if ((this.mAudioTrack == null) || (this.mThreadAudioWrite == null) || (this.mNativeHandle.native_point == 0)){
-      if ((this.mAudioTrackSteamState == 3) || (this.mAudioTrackSteamState == 0)) {
+  public int Pause() {
+    Log.d(TAG,"Pause");
+    if ((mAudioTrack == null) || (mThreadAudioWrite == null) || (mNativeHandle.native_point == 0)) {
+      if ((mAudioTrackSteamState == AudioTrackSteamState.STREAM_RELEASED) || (mAudioTrackSteamState == AudioTrackSteamState.STREAM_STOPPED)) {
         return 10000;
-      }else if (this.mAudioTrackSteamState == 2){
+      } else if (mAudioTrackSteamState == AudioTrackSteamState.STREAM_PAUSED) {
         return 0;
       }
     }
 
-    this.mAudioTrackSteamState = 2;
-    this.mAudioTrackLock.lock();
-    if (this.mAudioTrack != null) {
-      this.mAudioTrack.pause();
+    mAudioTrackSteamState = AudioTrackSteamState.STREAM_PAUSED;
+    mAudioTrackLock.lock();
+    if (mAudioTrack != null) {
+      mAudioTrack.pause();
     }
-    this.mAudioTrackLock.unlock();
-    synchronized (this.mWorkingThreadSyncObj)
-    {
-      this.mWorkingThreadSyncObj.notifyAll();
+    mAudioTrackLock.unlock();
+    synchronized (mWorkingThreadSyncObj) {
+      mWorkingThreadSyncObj.notifyAll();
       return 0;
     }
   }
 
-  public int Release()
-  {
-    Log.d(this.tag, "Release");
-    this.mAudioTrackSteamState = 3;
-    this.mAudioWriteWorkingFunc.setExitFlag();
-    if (this.mThreadAudioWrite != null){
+  public int Release() {
+    Log.d(TAG,"Release");
+    mAudioTrackSteamState = AudioTrackSteamState.STREAM_RELEASED;
+    mAudioWriteWorkingFunc.setExitFlag();
+    if (mThreadAudioWrite != null) {
       try {
-        this.mThreadAudioWrite.join();
-        this.mThreadAudioWrite = null;
-        libisstts.destroy(this.mNativeHandle);
+        mThreadAudioWrite.join();
+        mThreadAudioWrite = null;
+        libisstts.destroy(mNativeHandle);
         return 0;
       } catch (InterruptedException localInterruptedException) {
         localInterruptedException.printStackTrace();
@@ -117,243 +105,219 @@ public class TtsPlayer
     return 0;
   }
 
-  public int Resume()
-  {
-    Log.d(this.tag, "Resume");
-    if ((this.mAudioTrack == null) || (this.mThreadAudioWrite == null) || (this.mNativeHandle.native_point == 0)){
-      if ((this.mAudioTrackSteamState == 3) || (this.mAudioTrackSteamState == 0)){
+  public int Resume() {
+    Log.d(TAG,"Resume");
+    if ((mAudioTrack == null) || (mThreadAudioWrite == null) || (mNativeHandle.native_point == 0)) {
+      if ((mAudioTrackSteamState == AudioTrackSteamState.STREAM_RELEASED) || (mAudioTrackSteamState == AudioTrackSteamState.STREAM_STOPPED)) {
         return 10000;
-      }else if (this.mAudioTrackSteamState == 1)
+      } else if (mAudioTrackSteamState == AudioTrackSteamState.STREAM_RUNNING) {
         return 0;
+      }
     }
 
-    this.mAudioTrackSteamState = 1;
-    this.mAudioTrackLock.lock();
-    if (this.mAudioTrack != null) {
-      this.mAudioTrack.play();
+    mAudioTrackSteamState = AudioTrackSteamState.STREAM_RUNNING;
+    mAudioTrackLock.lock();
+    if (mAudioTrack != null) {
+      mAudioTrack.play();
     }
-    this.mAudioTrackLock.unlock();
-    synchronized (this.mWorkingThreadSyncObj)
-    {
-      this.mWorkingThreadSyncObj.notifyAll();
+    mAudioTrackLock.unlock();
+    synchronized (mWorkingThreadSyncObj) {
+      mWorkingThreadSyncObj.notifyAll();
       return 0;
     }
   }
 
-  public int SetParam(int paramInt1, int paramInt2)
-  {
-    Log.d(this.tag, "SetParam");
-    if (this.mNativeHandle.native_point == 0) {
+  public int SetParam(int paramInt1, int paramInt2) {
+    Log.d(TAG,"SetParam");
+    if (mNativeHandle.native_point == 0) {
       return 10000;
     }
-    libisstts.setParam(this.mNativeHandle, paramInt1, paramInt2);
-    return this.mNativeHandle.err_ret;
+    libisstts.setParam(mNativeHandle, paramInt1, paramInt2);
+    return mNativeHandle.err_ret;
   }
 
-  public int Start(String paramString)
-  {
-    Log.d(this.tag, "Start");
-    if ((this.mAudioTrack == null) || (this.mThreadAudioWrite == null) || (this.mNativeHandle.native_point == 0)){
+  public int Start(String paramString) {
+    Log.d(TAG,"Start");
+    if ((mAudioTrack == null) || (mThreadAudioWrite == null) || (mNativeHandle.native_point == 0)) {
       Stop();
       return 10000;
     }
-    if (this.mAudioTrackSteamState == 3){
-      this.nPreTextIndex = -1;
-      this.mOnDataReadyFlag = false;
-    }
+    synchronized (mWorkingThreadSyncObj) {
+      if (mAudioTrackSteamState == AudioTrackSteamState.STREAM_RELEASED) {
+        nPreTextIndex = -1;
+        mOnDataReadyFlag = false;
+      }
 
-    Log.d(this.tag, "start text : " + paramString);
-    libisstts.start(this.mNativeHandle, paramString);
-    if (this.mNativeHandle.err_ret != 0) {
-      return this.mNativeHandle.err_ret;
-    }
-    this.mAudioTrackSteamState = 1;
-    this.mAudioTrackLock.lock();
-    if (this.mAudioTrack != null) {
-      this.mAudioTrack.play();
-    }
-    this.mAudioTrackLock.unlock();
-    synchronized (this.mWorkingThreadSyncObj)
-    {
-      this.mWorkingThreadSyncObj.notifyAll();
+      Log.d(TAG,"start text : " + paramString);
+      libisstts.start(mNativeHandle, paramString);
+      if (mNativeHandle.err_ret != 0) {
+        return mNativeHandle.err_ret;
+      }
+      mAudioTrackSteamState = AudioTrackSteamState.STREAM_RUNNING;
+      mAudioTrackLock.lock();
+      if (mAudioTrack != null) {
+        mAudioTrack.play();
+      }
+      mAudioTrackLock.unlock();
+
+      mWorkingThreadSyncObj.notifyAll();
       return 0;
     }
   }
 
-  public int Stop()
-  {
-    Log.d(this.tag, "Stop");
-    if ((this.mAudioTrack == null) || (this.mThreadAudioWrite == null) || (this.mNativeHandle.native_point == 0)){
-      if(mAudioTrackSteamState == 3) {
+  public int Stop() {
+    Log.d(TAG,"Stop " + mAudioTrackSteamState);
+    synchronized (mWorkingThreadSyncObj) {
+      if (mAudioTrackSteamState == AudioTrackSteamState.STREAM_RELEASED) {
         return 10000;
-      }else if (this.mAudioTrackSteamState == 0)
+      } else if (mAudioTrackSteamState == AudioTrackSteamState.STREAM_STOPPED) {
         return 0;
+      }
+    }
+    libisstts.stop(mNativeHandle);
+    mAudioTrackLock.lock();
+    if (mAudioTrack != null) {
+      mAudioTrack.pause();
+      mAudioTrack.flush();
+    }
+    mAudioTrackLock.unlock();
+    if (mITTSListener != null) {
+      mITTSListener.onTTSPlayInterrupted();
     }
 
-    this.mAudioTrackSteamState = 0;
-    libisstts.stop(this.mNativeHandle);
-    this.mAudioTrackLock.lock();
-    if (this.mAudioTrack != null)
-    {
-      this.mAudioTrack.pause();
-      this.mAudioTrack.flush();
-    }
-    this.mAudioTrackLock.unlock();
-    synchronized (this.mWorkingThreadSyncObj)
-    {
-      this.mWorkingThreadSyncObj.notifyAll();
-    }
-    if (this.mITTSListener != null){
-      this.mITTSListener.onTTSPlayInterrupted();
+    synchronized (mWorkingThreadSyncObj){
+      mWorkingThreadSyncObj.notifyAll();
+      mAudioTrackSteamState = AudioTrackSteamState.STREAM_STOPPED;
     }
 
     return 0;
   }
 
-  public void onDataReady()
-  {
-    Log.d(this.tag, "onDataReady");
-    this.mOnDataReadyFlag = true;
-    if (this.mITTSListener != null) {
-      this.mITTSListener.onTTSPlayBegin();
+  @Override
+  public void onDataReady() {
+    Log.d(TAG,"onDataReady");
+    synchronized (mWorkingThreadSyncObj) {
+      mOnDataReadyFlag = true;
+      mWorkingThreadSyncObj.notifyAll();
+    }
+
+    if (mITTSListener != null) {
+      mITTSListener.onTTSPlayBegin();
     }
   }
 
-  public void onProgress(int paramInt1, int paramInt2)
-  {
-    if (this.nPreTextIndex < paramInt1)
-    {
-      Log.d(this.tag, "onProgress(" + paramInt1 + ", " + paramInt2 + ")");
+  @Override
+  public void onProgress(int paramInt1, int paramInt2) {
+    if (nPreTextIndex < paramInt1) {
+      Log.d(TAG,"onProgress(" + paramInt1 + ", " + paramInt2 + ")");
 
     }
 
-    if (this.mITTSListener != null){
-      this.mITTSListener.onTTSProgressReturn(paramInt1, paramInt2);
-      this.nPreTextIndex = paramInt1;
+    if (mITTSListener != null) {
+      mITTSListener.onTTSProgressReturn(paramInt1, paramInt2);
+      nPreTextIndex = paramInt1;
     }
   }
 
-  public void setListener(ITTSListener paramITTSListener)
-  {
-    this.mITTSListener = paramITTSListener;
+  public void setListener(ITTSListener paramITTSListener) {
+    mITTSListener = paramITTSListener;
   }
 
-  private class AudioTrackSteamState
-  {
+  private class AudioTrackSteamState {
     public static final int STREAM_PAUSED = 2;
     public static final int STREAM_RELEASED = 3;
     public static final int STREAM_RUNNING = 1;
-    public static final int STREAM_STOPPED = 4;
+    public static final int STREAM_STOPPED = 0;
 
-    private AudioTrackSteamState()
-    {
+    private AudioTrackSteamState() {
     }
   }
 
   private class AudioWriteWorkingFunc
-    implements Runnable
-  {
-    private static final String tag = "AudioWriteWorkingFunc";
+          implements Runnable {
     private boolean mExitFlag = false;
 
-    private AudioWriteWorkingFunc()
-    {
+    private AudioWriteWorkingFunc() {
     }
 
-    public void clearExitFlag()
-    {
-      this.mExitFlag = false;
+    public void clearExitFlag() {
+      mExitFlag = false;
     }
 
-    public void run()
-    {
-      Log.d("AudioWriteWorkingFunc", "AudioWriteWorkingFunc In.");
-      if ((TtsPlayer.this.mAudioTrack == null) || (TtsPlayer.this.mNativeHandle.native_point == 0) || (TtsPlayer.this.mMinBufferSizeInBytes == 0))
-      {
-        Log.e("AudioWriteWorkingFunc", "mAudioTrack==null || mNativeHandle.native_point == 0 || mMinBufferSizeInBytes==0, this should never happen.");
-        TtsPlayer.this.mAudioTrackLock.lock();
-        if (TtsPlayer.this.mAudioTrack != null)
-        {
-          TtsPlayer.this.mAudioTrack.release();
-          TtsPlayer.this.mAudioTrack = null;
+    @Override
+    public void run() {
+      Log.d(TAG,"AudioWriteWorkingFunc In.");
+      if ((mAudioTrack == null) || (mNativeHandle.native_point == 0) || (mMinBufferSizeInBytes == 0)) {
+        Log.e(TAG,"mAudioTrack==null || mNativeHandle.native_point == 0 || mMinBufferSizeInBytes==0, should never happen.");
+        mAudioTrackLock.lock();
+        if (mAudioTrack != null) {
+          mAudioTrack.release();
+          mAudioTrack = null;
         }
-        TtsPlayer.this.mAudioTrackLock.unlock();
-        Log.d("AudioWriteWorkingFunc", "AudioWriteWorkingFunc Out.");
+        mAudioTrackLock.unlock();
+        Log.d(TAG,"AudioWriteWorkingFunc Out.");
         return;
       }
-      byte[] arrayOfByte = new byte[TtsPlayer.this.mMinBufferSizeInBytes];
-      Log.d("AudioWriteWorkingFunc", "mBufferOnceSizeInBytes is " + TtsPlayer.this.mMinBufferSizeInBytes);
+      byte[] arrayOfByte = new byte[mMinBufferSizeInBytes];
+      Log.d(TAG,"mBufferOnceSizeInBytes is " + mMinBufferSizeInBytes);
       while (!mExitFlag) {
-         synchronized (mWorkingThreadSyncObj){
-           if (TtsPlayer.this.mAudioTrackSteamState != 1 && TtsPlayer.this.mOnDataReadyFlag){
-             try {
-               mWorkingThreadSyncObj.wait();
-             } catch (InterruptedException e) {
-               e.printStackTrace();
-             }
-           }
-         }
-
-
-          int[] arrayOfInt = new int[1];
-          libisstts.getAudioData(TtsPlayer.this.mNativeHandle, arrayOfByte, TtsPlayer.this.mMinBufferSizeInBytes, arrayOfInt);
-          if (TtsPlayer.this.mNativeHandle.err_ret == 10004)
-          {
-            Log.d("AudioWriteWorkingFunc", "libisstts.getAudioData Completed.");
-            TtsPlayer.this.mAudioTrackSteamState = 0;
-            if (TtsPlayer.this.mITTSListener != null){
-              TtsPlayer.this.mITTSListener.onTTSPlayCompleted();
-            }
-            continue;
-          }
-          if (arrayOfInt[0] <= 0){
-            try{
-              synchronized (TtsPlayer.this.mWorkingThreadSyncObj)
-              {
-//                Log.d("AudioWriteWorkingFunc", "Before wait(5)");
-                TtsPlayer.this.mWorkingThreadSyncObj.wait(5L);
-//                Log.d("AudioWriteWorkingFunc", "After wait(5)");
+        if (mAudioTrackSteamState != AudioTrackSteamState.STREAM_RUNNING || !mOnDataReadyFlag) {
+          synchronized (mWorkingThreadSyncObj) {
+            if (mAudioTrackSteamState != AudioTrackSteamState.STREAM_RUNNING || !mOnDataReadyFlag) {
+              try {
+                mWorkingThreadSyncObj.wait();
+              } catch (InterruptedException e) {
+                e.printStackTrace();
               }
-            } catch (InterruptedException e) {
-              e.printStackTrace();
+
+              Log.i(TAG,"run play");
+
+              if (mExitFlag) {
+                break;
+              }
             }
           }
-          TtsPlayer.this.mAudioTrackLock.lock();
-          int i = TtsPlayer.this.mAudioTrack.write(arrayOfByte, 0, arrayOfInt[0]);
-          TtsPlayer.this.mAudioTrackLock.unlock();
-          if (i >= 0)
-            continue;
-//          Log.e("AudioWriteWorkingFunc", "mAudioTrack.write(size=" + arrayOfInt[0] + ") ret " + i);
-          TtsPlayer.this.mAudioTrackSteamState = 0;
-          Thread.yield();
         }
+
+        int[] arrayOfInt = new int[1];
+        libisstts.getAudioData(mNativeHandle, arrayOfByte, mMinBufferSizeInBytes, arrayOfInt);
+        if (mNativeHandle.err_ret == 10004) {
+          Log.d(TAG,"libisstts.getAudioData Completed.");
+          mAudioTrackSteamState = AudioTrackSteamState.STREAM_STOPPED;
+          if (mITTSListener != null) {
+            mITTSListener.onTTSPlayCompleted();
+          }
+          continue;
+        }
+        if (arrayOfInt[0] <= 0) {
+          try {
+            synchronized (mWorkingThreadSyncObj) {
+              mWorkingThreadSyncObj.wait(5L);
+            }
+          } catch (InterruptedException e) {
+            e.printStackTrace();
+          }
+          continue;
+        }
+        mAudioTrackLock.lock();
+        int i = mAudioTrack.write(arrayOfByte, 0, arrayOfInt[0]);
+        mAudioTrackLock.unlock();
+        if (i >= 0) {
+          continue;
+        }
+        Log.e(TAG,"mAudioTrack.write(size=" + arrayOfInt[0] + ") ret " + i);
+        synchronized (mWorkingThreadSyncObj) {
+          mAudioTrackSteamState = AudioTrackSteamState.STREAM_STOPPED;
+        }
+        Thread.yield();
+
+      }
     }
 
-//        try
-//        {
-//          label374: synchronized (TtsPlayer.this.mWorkingThreadSyncObj)
-//          {
-//            Log.d("AudioWriteWorkingFunc", "Before wait(5)");
-//            TtsPlayer.this.mWorkingThreadSyncObj.wait(5L);
-//            Log.d("AudioWriteWorkingFunc", "After wait(5)");
-//          }
-//        }
-//        catch (InterruptedException localInterruptedException2)
-//        {
-//          while (true)
-//            localInterruptedException2.printStackTrace();
-//        }
-//
-//
-//    }
-
-    public void setExitFlag()
-    {
-      this.mExitFlag = true;
-      synchronized (TtsPlayer.this.mWorkingThreadSyncObj)
-      {
-        TtsPlayer.this.mWorkingThreadSyncObj.notifyAll();
-        return;
+    public void setExitFlag() {
+      mExitFlag = true;
+      synchronized (mWorkingThreadSyncObj) {
+        mWorkingThreadSyncObj.notifyAll();
       }
     }
   }
