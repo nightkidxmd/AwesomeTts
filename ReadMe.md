@@ -7,6 +7,7 @@
 >iflytek tts for autonavi --- Zhiling Lin
 
 `/assets/tts/iflytek/autonavi`
+You can download more voice res from AutoNavi App
 #### 1.2 TtsType.AWESOME_TTS
 >iflytek original tts
 
