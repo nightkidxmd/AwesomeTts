@@ -23,9 +23,6 @@ import android.os.Message;
 import android.text.TextUtils;
 import android.util.Log;
 
-import com.tuyou.tsd.common.TSDDebug;
-import com.tuyou.tsd.common.util.L;
-
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -680,7 +677,7 @@ public class StateMachine {
         private boolean mHasQuit = false;
 
         /** The debug flag */
-        private boolean mDbg = TSDDebug.DEBUG;
+        private boolean mDbg = true;
 
         /** The SmHandler object, identifies that message is internal */
         private static final Object mSmHandlerObj = new Object();
@@ -2017,7 +2014,7 @@ public class StateMachine {
      * @param s is string log
      */
     protected void log(String s) {
-        L.d(mName, s);
+       Log.d(mName, s);
     }
 
     /**
@@ -2026,7 +2023,7 @@ public class StateMachine {
      * @param s is string log
      */
     protected void logd(String s) {
-        L.d(mName, s);
+       Log.d(mName, s);
     }
 
     /**
@@ -2035,7 +2032,7 @@ public class StateMachine {
      * @param s is string log
      */
     protected void logv(String s) {
-        L.v(mName, s);
+       Log.v(mName, s);
     }
 
     /**
@@ -2044,7 +2041,7 @@ public class StateMachine {
      * @param s is string log
      */
     protected void logi(String s) {
-        L.i(mName, s);
+        Log.i(mName, s);
     }
 
     /**
@@ -2053,7 +2050,7 @@ public class StateMachine {
      * @param s is string log
      */
     protected void logw(String s) {
-        L.w(mName, s);
+       Log.w(mName, s);
     }
 
     /**
@@ -2062,7 +2059,7 @@ public class StateMachine {
      * @param s is string log
      */
     protected void loge(String s) {
-        L.e(mName, s);
+       Log.e(mName, s);
     }
 
     /**

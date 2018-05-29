@@ -1,15 +1,18 @@
 package com.dreamland.awesometts;
 
 /**
- * Created by XMD on 2017/4/15.
+ *
+ * @author XMD
+ * @date 2017/4/15
  */
 
 public interface ITTS {
     void init();
+    void init(int role);
+    void switchRole(int role);
     void play(String content);
     void stop();
     void destroy();
-    void setRole(int role);
     int getRole();
     void setPitch(int pitch);
     int getPitch();
@@ -17,4 +20,5 @@ public interface ITTS {
     int getSpeed();
     void setVolume(int volume);
     int getVolume();
+    TtsType getTtsType();
 }

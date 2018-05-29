@@ -18,6 +18,7 @@ import java.util.List;
 import java.util.concurrent.LinkedBlockingDeque;
 
 
+
 public class TTSEngine<T extends AbsTtsInfo> implements OnCompletionListener, OnErrorListener, AudioManager.OnAudioFocusChangeListener, ITTSInnerListener {
 
 	private final String AUDIO_PATH;
@@ -31,14 +32,15 @@ public class TTSEngine<T extends AbsTtsInfo> implements OnCompletionListener, On
 	private AudioManager mAudioManager;
 
 	private TtsCore ttsCore;
-
+	
 	private TtsReaderThread mTtsReaderThread;
 
-	public TTSEngine(Context context,TtsType ttsType){
+	public TTSEngine(Context context,String resPath,TtsRoleConfig ttsRoleConfig){
 		mContext = context;
-		AUDIO_PATH = context.getObbDir().getAbsolutePath();
+		AUDIO_PATH = context.getCacheDir().getAbsolutePath();
 		mAudioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
-		ttsCore = new TtsCore(context,ttsType,this);
+		ttsCore = new TtsCore(context,this,resPath,ttsRoleConfig);
+		init();
 	}
 
 	synchronized public void registerITTSListener(ITTSListener<T> l){
@@ -49,6 +51,10 @@ public class TTSEngine<T extends AbsTtsInfo> implements OnCompletionListener, On
 
 	synchronized public void unregisterITTSListener(ITTSListener<T> l){
 		mListeners.remove(l);
+	}
+
+	public void switchRole(TtsRoleConfig ttsRoleConfig){
+		ttsCore.switchTts(ttsRoleConfig);
 	}
 
 	@Override
@@ -91,7 +97,6 @@ public class TTSEngine<T extends AbsTtsInfo> implements OnCompletionListener, On
 
 	}
 
-
 	private class TtsReaderThread extends AbsPollOnceThread {
 		private LinkedBlockingDeque<T> mTtsQueue = new LinkedBlockingDeque<>();
 		private final Object _lock = new Object();
@@ -105,7 +110,7 @@ public class TTSEngine<T extends AbsTtsInfo> implements OnCompletionListener, On
 			Log.v(TAG, "clearQueue:"+mTtsQueue.peekLast());
 			mTtsQueue.clear();
 		}
-
+		
 		public void notifyEnd(){
 			synchronized (_lock) {
 				_lock.notify();
@@ -133,19 +138,20 @@ public class TTSEngine<T extends AbsTtsInfo> implements OnCompletionListener, On
 					}
 				}else{
 					Log.e(TAG,"播放失败:"+currentInfo);
+					onTTSEnd();
 				}
 			}
-
+			
 		}
 
 		@Override
 		protected void ready() {
-
+				
 		}
 
 		public T getCurrentInfo() {
 			return currentInfo;
-		}
+		}	
 	}
 
 	public void init(){
@@ -160,44 +166,40 @@ public class TTSEngine<T extends AbsTtsInfo> implements OnCompletionListener, On
 		}
 	}
 
-
-
 	protected boolean _play(String content){
 		Log.i(TAG,"_play:"+content);
-		if(TextUtils.isEmpty(content)){
+		if(content != null && TextUtils.isEmpty(content.trim())){
 			onTTSPlay();
-			onTTSEnd();
 			return false;
 		}else {
 			ttsCore.play(content);
 		}
+
 		return true;
 	}
 
-
+	
 	public void stop(){
 		T info = mTtsReaderThread.getCurrentInfo();
 		if(info != null){
 			Log.w(TAG,"stop:"+info);
 			switch(info.getType()){
-			case AbsTtsInfo.TYPE_TTS:
-				ttsCore.stop();
-				break;
-			case AbsTtsInfo.TYPE_AUDIO:
-				stopAudio();
-				break;
+				case AbsTtsInfo.TYPE_TTS:
+					ttsCore.stop();
+					break;
+				case AbsTtsInfo.TYPE_AUDIO:
+					stopAudio();
+					break;
 			}
 		}
 		mAudioManager.abandonAudioFocus(this);
 	}
 
 	public void clear(){
+        ttsCore.stop();
 		mTtsReaderThread.clearQueue();
-		ttsCore.stop();
 		stopAudio();
 	}
-	
-	
 
 	@CallSuper
 	public void destroy(){
@@ -211,8 +213,6 @@ public class TTSEngine<T extends AbsTtsInfo> implements OnCompletionListener, On
 		mContext = null;
 		mAudioManager.abandonAudioFocus(this);
 	}
-	
-	
 
 	private MediaPlayer mMediaPlayer;
 	
@@ -228,6 +228,7 @@ public class TTSEngine<T extends AbsTtsInfo> implements OnCompletionListener, On
 			onTTSPlay();
 		} catch (IllegalArgumentException | SecurityException | IOException | IllegalStateException e) {
 			e.printStackTrace();
+			onTTSPlay();
 			return false;
 		}
 		return true;
@@ -241,7 +242,6 @@ public class TTSEngine<T extends AbsTtsInfo> implements OnCompletionListener, On
 		}catch (IllegalStateException ignored){
 
 		}
-
 	}
 
 	@Override

@@ -5,6 +5,7 @@ package com.dreamland.awesometts;
  */
 
 public enum  TtsType {
+    NONE_TTS,
     MAGIC_TTS,
-    AWESOME_TTS,
+    AWESOME_TTS
 }

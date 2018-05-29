@@ -7,31 +7,33 @@ import com.dreamland.awesometts.utils.statemachine.StateMachine;
 
 
 /**
- * Created by XMD on 2017/4/15.
+ *
+ * @author XMD
+ * @date 2017/4/15
  */
 
 abstract public class TtsStateMachine extends StateMachine {
+    public static final int MESSAGE_INIT                    = 0;
+    public static final int MESSAGE_INIT_ERROR              = 1;
+    public static final int MESSAGE_READY                   = 2;
+    public static final int MESSAGE_DESTROY                 = 3;
+    public static final int MESSAGE_DESTROYED               = 4;
+    public static final int MESSAGE_SWITCHING_ROLE          = 5;
+
+    public static final int MESSAGE_TTS_PLAY        = 100;
+    public static final int MESSAGE_TTS_STOP        = 101;
+    public static final int MESSAGE_TTS_SET_VOLUME  = 102;
+    public static final int MESSAGE_TTS_SET_PITCH   = 103;
+    public static final int MESSAGE_TTS_SET_SPEED   = 104;
+    @Deprecated
+    public static final int MESSAGE_TTS_SET_ROLE    = 105;
     private Default aDefault;
     private EngineInitializing engineInitializing;
     private EngineInitializingError engineInitializingError;
     private EngineReady engineReady;
     private EngineDestroying engineDestroying;
     private EngineDestroyed engineDestroyed;
-
-
-    public static final int MESSAGE_INIT        =      0;
-    public static final int MESSAGE_INIT_ERROR  =      1;
-    public static final int MESSAGE_READY       =      2;
-    public static final int MESSAGE_DESTROY     =      3;
-    public static final int MESSAGE_DESTROYED   =      4;
-
-
-    public static final int MESSAGE_TTS_PLAY            =    100;
-    public static final int MESSAGE_TTS_STOP            =    101;
-    public static final int MESSAGE_TTS_SET_VOLUME      =    102;
-    public static final int MESSAGE_TTS_SET_PITCH       =    103;
-    public static final int MESSAGE_TTS_SET_SPEED       =    104;
-    public static final int MESSAGE_TTS_SET_ROLE        =    105;
+    private SwitchingRole switchingRole;
 
 
     protected TtsStateMachine(String name) {
@@ -39,22 +41,42 @@ abstract public class TtsStateMachine extends StateMachine {
         init();
     }
 
-    private void init(){
+    /**
+     *                                 Default
+     *             _______________________|_________________________
+     *            |                  |                             |
+     *       Initializing         Destroyed               InitializingError
+     *           |
+     *           |
+     *         Ready
+     *        ___|_____________
+     *       |                |
+     * SwitchingRole      Destroying
+     */
+    private void init() {
         addState(aDefault = new Default());
-        addState(engineInitializing = new EngineInitializing(),aDefault);
-        addState(engineInitializingError = new EngineInitializingError(),aDefault);
-        addState(engineReady = new EngineReady(),engineInitializing);
-        addState(engineDestroying = new EngineDestroying(),engineReady);
-        addState(engineDestroyed = new EngineDestroyed(),engineDestroying);
+        addState(engineInitializing = new EngineInitializing(), aDefault);
+        addState(engineInitializingError = new EngineInitializingError(), aDefault);
+        addState(engineReady = new EngineReady(), engineInitializing);
+        addState(switchingRole = new SwitchingRole(),engineReady);
+        addState(engineDestroying = new EngineDestroying(), engineReady);
+        addState(engineDestroyed = new EngineDestroyed(), aDefault);
         setInitialState(aDefault);
         start();
     }
 
+    abstract protected void onInitializing();
+
+    abstract protected void onHandleTts(Message msg);
+
+    abstract protected void onDestroy();
+
+    abstract protected void onSwitchingRole();
 
     private class Default extends State {
         @Override
         public boolean processMessage(Message msg) {
-            switch (msg.what){
+            switch (msg.what) {
                 case MESSAGE_INIT:
                     transitionTo(engineInitializing);
                     return HANDLED;
@@ -67,9 +89,9 @@ abstract public class TtsStateMachine extends StateMachine {
             }
             return super.processMessage(msg);
         }
-}
+    }
 
-    public class EngineInitializing extends State{
+    private class EngineInitializing extends State {
         @Override
         public void enter() {
             super.enter();
@@ -78,7 +100,7 @@ abstract public class TtsStateMachine extends StateMachine {
 
         @Override
         public boolean processMessage(Message msg) {
-            switch (msg.what){
+            switch (msg.what) {
                 case MESSAGE_READY:
                     transitionTo(engineReady);
                 case MESSAGE_INIT:
@@ -90,7 +112,7 @@ abstract public class TtsStateMachine extends StateMachine {
         }
     }
 
-    public class EngineInitializingError extends State{
+    private class EngineInitializingError extends State {
         @Override
         public void enter() {
             super.enter();
@@ -99,7 +121,7 @@ abstract public class TtsStateMachine extends StateMachine {
 
         @Override
         public boolean processMessage(Message msg) {
-            switch (msg.what){
+            switch (msg.what) {
                 case MESSAGE_INIT_ERROR:
                     return HANDLED;
             }
@@ -107,10 +129,10 @@ abstract public class TtsStateMachine extends StateMachine {
         }
     }
 
-    public class EngineReady extends State{
+    private class EngineReady extends State {
         @Override
         public boolean processMessage(Message msg) {
-            switch (msg.what){
+            switch (msg.what) {
                 case MESSAGE_TTS_PLAY:
                 case MESSAGE_TTS_STOP:
                 case MESSAGE_TTS_SET_PITCH:
@@ -123,12 +145,15 @@ abstract public class TtsStateMachine extends StateMachine {
                 case MESSAGE_DESTROY:
                     transitionTo(engineDestroying);
                     return HANDLED;
+                case MESSAGE_SWITCHING_ROLE:
+                    transitionTo(switchingRole);
+                    return HANDLED;
             }
             return super.processMessage(msg);
         }
     }
 
-    public class EngineDestroying extends State{
+    private class EngineDestroying extends State {
         @Override
         public void enter() {
             super.enter();
@@ -137,7 +162,7 @@ abstract public class TtsStateMachine extends StateMachine {
 
         @Override
         public boolean processMessage(Message msg) {
-            switch (msg.what){
+            switch (msg.what) {
                 case MESSAGE_DESTROYED:
                     transitionTo(engineDestroyed);
                 case MESSAGE_DESTROY:
@@ -147,7 +172,7 @@ abstract public class TtsStateMachine extends StateMachine {
         }
     }
 
-    public class EngineDestroyed extends State{
+    private class EngineDestroyed extends State {
         @Override
         public void enter() {
             super.enter();
@@ -156,7 +181,7 @@ abstract public class TtsStateMachine extends StateMachine {
 
         @Override
         public boolean processMessage(Message msg) {
-            switch (msg.what){
+            switch (msg.what) {
                 case MESSAGE_DESTROYED:
                     return HANDLED;
             }
@@ -164,8 +189,25 @@ abstract public class TtsStateMachine extends StateMachine {
         }
     }
 
+    public class SwitchingRole extends State {
+        @Override
+        public void enter() {
+            super.enter();
+            onSwitchingRole();
+        }
 
-    abstract protected void onInitializing();
-    abstract protected void onHandleTts(Message msg);
-    abstract protected void onDestroy();
+        @Override
+        public boolean processMessage(Message msg) {
+            switch (msg.what){
+                case MESSAGE_SWITCHING_ROLE:{
+                    return HANDLED;
+                }
+                case MESSAGE_READY:{
+                    transitionTo(engineReady);
+                    return HANDLED;
+                }
+            }
+            return super.processMessage(msg);
+        }
+    }
 }

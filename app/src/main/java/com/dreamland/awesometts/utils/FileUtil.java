@@ -11,6 +11,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -192,5 +193,40 @@ public class FileUtil {
             }
         }
         return code;
+    }
+
+    /**
+     * write file
+     *
+     * @param filePath
+     * @param content
+     * @param append   is append, if true, write to the end of file, else clear content of file and write into it
+     * @return return false if content is empty, true otherwise
+     * @throws RuntimeException if an error occurs while operator FileWriter
+     */
+    public static boolean writeFile(String filePath, String content, boolean append) {
+        if (TextUtils.isEmpty(content)) {
+            return false;
+        }
+
+        FileWriter fileWriter = null;
+        try {
+            makeDirs(filePath+".tmp");
+            fileWriter = new FileWriter(filePath+".tmp", append);
+            fileWriter.write(content);
+            fileWriter.close();
+            File temp = new File(filePath+".tmp");
+            return  temp.renameTo(new File(filePath));
+        } catch (IOException e) {
+            throw new RuntimeException("IOException occurred. ", e);
+        } finally {
+            if (fileWriter != null) {
+                try {
+                    fileWriter.close();
+                } catch (IOException e) {
+                    throw new RuntimeException("IOException occurred. ", e);
+                }
+            }
+        }
     }
 }

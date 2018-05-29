@@ -12,10 +12,13 @@ import java.lang.ref.WeakReference;
 public abstract class BaseTTS extends TtsStateMachine implements ITTS,ITTSInnerListener {
     private ITTSInnerListener listener;
     private WeakReference<Context> context;
-    protected BaseTTS(Context context, ITTSInnerListener listener, String name) {
+    protected String resPath;
+    protected int role = -1;
+    protected BaseTTS(Context context,ITTSInnerListener listener,String name,String resPath) {
         super(name);
         this.context = new WeakReference<>(context);
         this.listener = listener;
+        this.resPath = resPath;
     }
 
     @Override
@@ -38,6 +41,12 @@ public abstract class BaseTTS extends TtsStateMachine implements ITTS,ITTSInnerL
     }
 
     @Override
+    final public void init(int role) {
+        this.role = role;
+        sendMessage(MESSAGE_INIT);
+    }
+
+    @Override
     final public void play(String content) {
         sendMessage(MESSAGE_TTS_PLAY,content);
     }
@@ -51,12 +60,6 @@ public abstract class BaseTTS extends TtsStateMachine implements ITTS,ITTSInnerL
     final public void destroy() {
         sendMessage(MESSAGE_DESTROY);
     }
-
-    @Override
-    final public void setRole(int role) {
-        sendMessage(MESSAGE_TTS_SET_ROLE,role);
-    }
-
 
     @Override
     final public void setPitch(int pitch) {
@@ -76,6 +79,12 @@ public abstract class BaseTTS extends TtsStateMachine implements ITTS,ITTSInnerL
     }
 
     @Override
+    final public void switchRole(int role) {
+        this.role = role;
+        sendMessage(MESSAGE_SWITCHING_ROLE);
+    }
+
+    @Override
     final protected void onHandleTts(Message msg) {
         switch (msg.what){
             case MESSAGE_TTS_PLAY:
@@ -86,9 +95,6 @@ public abstract class BaseTTS extends TtsStateMachine implements ITTS,ITTSInnerL
                 break;
             case MESSAGE_TTS_SET_PITCH:
                 handleSetPitch(msg.arg1);
-                break;
-            case MESSAGE_TTS_SET_ROLE:
-                handleSetRole(msg.arg1);
                 break;
             case MESSAGE_TTS_SET_SPEED:
                 handleSetSpeed(msg.arg1);
@@ -101,7 +107,6 @@ public abstract class BaseTTS extends TtsStateMachine implements ITTS,ITTSInnerL
 
     abstract protected void handleTtsPlay(String content);
     abstract protected void handleTtsStop();
-    abstract protected void handleSetRole(int role);
     abstract protected void handleSetPitch(int pitch);
     abstract protected void handleSetVolume(int volume);
     abstract protected void handleSetSpeed(int speed);
